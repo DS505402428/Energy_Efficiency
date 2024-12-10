@@ -1,0 +1,552 @@
+---
+title: "Stats1_Project"
+author: "Sandeep Daddala"
+date: "2024-11-13"
+output: word_document
+---
+
+```{r}
+getwd()
+```
+
+```{r}
+library(ggplot2)
+library(corrplot)
+library(GGally)
+library(readr)
+library(gridExtra)
+library(caret)
+library(car)
+library(leaps)
+
+# Read the data and remove Cooling Load (Y2)
+building_data <- read_csv("/Users/sandeepdaddala/Desktop/Stats1/ENB2012_data.csv")
+building_data_no_y2 <- building_data[, !names(building_data) %in% c("Y2")]
+
+# Rename variables for clarity
+names(building_data_no_y2) <- c("Relative_Compactness", "Surface_Area", "Wall_Area", "Roof_Area",
+                                "Overall_Height", "Orientation", "Glazing_Area", 
+                                "Glazing_Area_Distribution", "Heating_Load")
+
+# Summary of a linear model for checking multicollinearity
+summary(lm(Heating_Load ~ ., data = building_data_no_y2))
+
+
+# Remove Surface Area and Roof Area due to high correlation
+building_data_reduced <- building_data_no_y2[, !names(building_data_no_y2) %in% c("Surface_Area", "Roof_Area")]
+
+# Check for NULL values and duplicates
+sum(is.na(building_data_reduced))
+colSums(is.na(building_data_reduced))
+duplicate_rows <- sum(duplicated(building_data_reduced))
+summary(building_data_reduced)
+```
+
+```{r}
+# 1. Correlation Heatmap
+cor_matrix <- cor(building_data_reduced)
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+```{r}
+# 2. Histograms
+gg_list_hist <- lapply(names(building_data_reduced), function(var) {
+  ggplot(building_data_reduced, aes(x = .data[[var]])) +
+    geom_histogram(fill = "skyblue", color = "black", bins = 20) +
+    labs(title = paste("Histogram for", var),
+         x = var, y = "Frequency") +
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.title.x = element_text(size = 12),
+          axis.title.y = element_text(size = 12))
+})
+grid.arrange(grobs = gg_list_hist, ncol = 3)
+```
+```{r}
+# Box Plot
+gg_list_box <- lapply(names(building_data_reduced), function(var) {
+  ggplot(building_data_reduced, aes(y = .data[[var]])) +
+    geom_boxplot(fill = "skyblue") +
+    labs(title = paste("Box Plot for", var),
+         y = var) +
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.title.x = element_text(size = 12),
+          axis.title.y = element_text(size = 12))
+})
+grid.arrange(grobs = gg_list_box, ncol = 3)
+
+```
+
+
+
+
+```{r}
+# 4. Scatter plots for Heating Load (Y1)
+scatter_y1 <- lapply(names(building_data_reduced)[1:7], function(var) {
+  ggplot(building_data_reduced, aes(x = .data[[var]], y = Heating_Load)) +
+    geom_point(color = "skyblue") +
+    labs(title = paste("Scatter Plot for Heating Load vs", var),
+         x = var, y = "Heating Load") +
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.title.x = element_text(size = 12),
+          axis.title.y = element_text(size = 12))
+})
+grid.arrange(grobs = scatter_y1, ncol = 3)
+```
+
+
+```{r}
+# 5. Pair plot
+ggpairs(building_data_reduced)
+
+# Check the correlation matrix of the reduced dataset
+cor_matrix_reduced <- cor(building_data_reduced)
+print(cor_matrix_reduced)
+
+# Visualize the new correlation matrix
+corrplot(cor_matrix_reduced, method = "color", type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+
+```{r}
+# Split the data into training and testing sets
+set.seed(123)  
+trainIndex <- createDataPartition(building_data_reduced$Heating_Load, p=0.8, list=FALSE)
+train_data <- building_data_reduced[trainIndex, ]
+test_data <- building_data_reduced[-trainIndex, ]
+```
+
+```{r}
+# Create a simple linear model
+lm_model <- lm(Heating_Load ~ ., data = train_data)
+
+# Print the summary of the model
+summary(lm_model)
+
+# Make predictions on the test data
+test_predictions <- predict(lm_model, newdata = test_data)
+
+# Evaluate the model's performance on the test data
+rmse <- sqrt(mean((test_data$Heating_Load - test_predictions)^2))
+rsq <- 1 - sum((test_data$Heating_Load - test_predictions)^2) / sum((test_data$Heating_Load - mean(test_data$Heating_Load))^2)
+
+# Print the test set performance metrics
+cat("Test set RMSE:", rmse, "\n")
+cat("Test set R-squared:", rsq, "\n")
+```
+
+```{r}
+# Set up cross-validation
+train_control <- trainControl(method="cv", number=10) 
+
+# Train the model with cross-validation
+lm_model_cv <- train(Heating_Load ~ ., data=train_data, method="lm", trControl=train_control)
+
+# Print the cross-validation results
+print(lm_model_cv)
+
+# Get the final model
+final_model <- lm_model_cv$finalModel
+
+# Print the summary of the final model
+summary(final_model)
+
+# Make predictions on the test data
+test_predictions <- predict(lm_model_cv, newdata=test_data)
+
+# Evaluate the model's performance on the test data
+rmse <- sqrt(mean((test_data$Heating_Load - test_predictions)^2))
+rsq <- 1 - sum((test_data$Heating_Load - test_predictions)^2) / sum((test_data$Heating_Load - mean(test_data$Heating_Load))^2)
+# Print the test set performance metrics
+cat("Test set RMSE:", rmse, "\n")
+cat("Test set R-squared:", rsq, "\n")
+
+# Visualization 1: Predicted vs Actual Plot
+ggplot(data.frame(Predicted = test_predictions, Actual = test_data$Heating_Load), aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs Actual Heating Load",
+       x = "Actual Heating Load",
+       y = "Predicted Heating Load") +
+  theme_minimal()
+
+```
+
+```{r}
+# Set up Leave-One-Out Cross-Validation
+train_control <- trainControl(method = "LOOCV")
+
+# Train the model with LOOCV
+lm_model_loocv <- train(Heating_Load ~ ., data = train_data, method = "lm", trControl = train_control)
+
+# Print the LOOCV results
+print(lm_model_loocv)
+
+# Get the final model
+final_model <- lm_model_loocv$finalModel
+
+# Print the summary of the final model
+summary(final_model)
+
+# Make predictions on the test data
+test_predictions <- predict(lm_model_loocv, newdata = test_data)
+
+# Evaluate the model's performance on the test data
+rmse <- sqrt(mean((test_data$Heating_Load - test_predictions)^2))
+rsq <- 1 - sum((test_data$Heating_Load - test_predictions)^2) / sum((test_data$Heating_Load - mean(test_data$Heating_Load))^2)
+
+# Print the test set performance metrics
+cat("LOOCV Test set RMSE:", rmse, "\n")
+cat("LOOCV Test set R-squared:", rsq, "\n")
+
+# Visualization: Predicted vs Actual Plot
+ggplot(data.frame(Predicted = test_predictions, Actual = test_data$Heating_Load), aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs Actual Heating Load (LOOCV)",
+       x = "Actual Heating Load",
+       y = "Predicted Heating Load") +
+  theme_minimal()
+```
+
+```{r}
+# Backward selection
+
+regfit.bwd <- regsubsets(Heating_Load ~ ., data=train_data, nvmax=6, method="backward")
+regfit.bwd.summary <- summary(regfit.bwd)
+print(regfit.bwd.summary)
+
+which.min(regfit.bwd.summary$bic)
+coef(regfit.bwd, which.min(regfit.bwd.summary$bic))
+cv.errors.bwd <- rep(NA,6)
+mae.bwd <- rep(NA,6)
+cv.r2.bwd <- rep(NA,6)
+test.mat=model.matrix(Heating_Load ~ ., data=building_data_reduced[-trainIndex,])
+for (i in 1:6) {
+  
+  coefi=coef(regfit.bwd,id=i)
+  pred=test.mat[,names(coefi)] %*% coefi
+  cv.errors.bwd[i]=mean((building_data_reduced$Heating_Load[-trainIndex]-pred)^2)
+  cv.r2.bwd[i] <- 1 - sum((pred-building_data_reduced$Heating_Load[-trainIndex])^2) / sum((building_data_reduced$Heating_Load[-trainIndex] - mean(building_data_reduced$Heating_Load[-trainIndex]))^2)
+  mae.bwd[i] <- mean(abs(building_data_reduced$Heating_Load[-trainIndex]-pred))
+}
+rmse_bwd <- sqrt(cv.errors.bwd)
+# Print the best model and its performance metrics
+best_model_index <- which.min(regfit.bwd.summary$bic)
+best_model_coefs <- coef(regfit.bwd, best_model_index)
+
+cat("Best Model:\n")
+print(best_model_coefs)
+
+cat("\nPerformance Metrics for the Best Model:\n")
+cat("RMSE:", rmse_bwd[best_model_index], "\n")
+cat("MAE:", mae.bwd[best_model_index], "\n")
+cat("R-squared:", cv.r2.bwd[best_model_index], "\n")
+# Visualization: Plot of BIC scores
+ggplot(data.frame(vars = 1:6, bic = regfit.bwd.summary$bic), aes(x = vars, y = bic)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "BIC Scores for Backward Selection",
+       x = "Number of Variables",
+       y = "BIC") +
+  theme_minimal()
+
+# Visualization: Plot of RMSE, MAE, and R-squared
+performance_df <- data.frame(
+  vars = 1:6,
+  RMSE = rmse_bwd,
+  MAE = mae.bwd,
+  R_squared = cv.r2.bwd
+)
+
+ggplot(performance_df, aes(x = vars)) +
+  geom_line(aes(y = RMSE, color = "RMSE")) +
+  geom_line(aes(y = MAE, color = "MAE")) +
+  geom_line(aes(y = R_squared, color = "R-squared")) +
+  labs(title = "Performance Metrics for Backward Selection",
+       x = "Number of Variables",
+       y = "Metric Value",
+       color = "Metric") +
+  theme_minimal()
+
+# Visualization: Variable Importance Plot
+var_importance <- data.frame(
+  Variable = names(coef(regfit.bwd, 6))[-1],
+  Importance = abs(coef(regfit.bwd, 6))[-1]
+)
+var_importance <- var_importance[order(-var_importance$Importance),]
+
+ggplot(var_importance, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Variable Importance in Backward Selection",
+       x = "Variables",
+       y = "Absolute Coefficient Value") +
+  theme_minimal()
+```
+
+```{r}
+# Forward selection
+regfit.fwd <- regsubsets(Heating_Load ~ ., data=train_data, nvmax=6, method="forward")
+regfit.fwd.summary <- summary(regfit.fwd)
+print(regfit.fwd.summary)
+
+which.min(regfit.fwd.summary$bic)
+coef(regfit.fwd, which.min(regfit.fwd.summary$bic))
+
+cv.errors.fwd <- rep(NA,6)
+mae.fwd <- rep(NA,6)
+cv.r2.fwd <- rep(NA,6)
+test.mat=model.matrix(Heating_Load ~ ., data=building_data_reduced[-trainIndex,])
+for (i in 1:6) {
+  
+  coefi=coef(regfit.fwd,id=i)
+  pred=test.mat[,names(coefi)] %*% coefi
+  cv.errors.fwd[i]=mean((building_data_reduced$Heating_Load[-trainIndex]-pred)^2)
+  cv.r2.fwd[i] <- 1 - sum((pred-building_data_reduced$Heating_Load[-trainIndex])^2) / sum((building_data_reduced$Heating_Load[-trainIndex] - mean(building_data_reduced$Heating_Load[-trainIndex]))^2)
+  mae.fwd[i] <- mean(abs(building_data_reduced$Heating_Load[-trainIndex]-pred))
+}
+rmse_fwd <- sqrt(cv.errors.fwd)
+
+# Print the best model and its performance metrics
+best_model_index <- which.min(regfit.fwd.summary$bic)
+best_model_coefs <- coef(regfit.fwd, best_model_index)
+
+cat("Best Model:\n")
+print(best_model_coefs)
+
+cat("\nPerformance Metrics for the Best Model:\n")
+cat("RMSE:", rmse_fwd[best_model_index], "\n")
+cat("MAE:", mae.fwd[best_model_index], "\n")
+cat("R-squared:", cv.r2.fwd[best_model_index], "\n")
+
+# Visualization: Plot of BIC scores
+ggplot(data.frame(vars = 1:6, bic = regfit.fwd.summary$bic), aes(x = vars, y = bic)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "BIC Scores for Forward Selection",
+       x = "Number of Variables",
+       y = "BIC") +
+  theme_minimal()
+
+# Visualization: Plot of RMSE, MAE, and R-squared
+performance_df <- data.frame(
+  vars = 1:6,
+  RMSE = rmse_fwd,
+  MAE = mae.fwd,
+  R_squared = cv.r2.fwd
+)
+
+ggplot(performance_df, aes(x = vars)) +
+  geom_line(aes(y = RMSE, color = "RMSE")) +
+  geom_line(aes(y = MAE, color = "MAE")) +
+  geom_line(aes(y = R_squared, color = "R-squared")) +
+  labs(title = "Performance Metrics for Forward Selection",
+       x = "Number of Variables",
+       y = "Metric Value",
+       color = "Metric") +
+  theme_minimal()
+
+# Visualization: Variable Importance Plot
+var_importance <- data.frame(
+  Variable = names(coef(regfit.fwd, 6))[-1],
+  Importance = abs(coef(regfit.fwd, 6))[-1]
+)
+var_importance <- var_importance[order(-var_importance$Importance),]
+
+ggplot(var_importance, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  coord_flip() +
+  labs(title = "Variable Importance in Forward Selection",
+       x = "Variables",
+       y = "Absolute Coefficient Value") +
+  theme_minimal()
+```
+
+```{r}
+# Create interaction terms for all pairs of predictors
+interaction_formula <- as.formula(paste("Heating_Load ~ (", paste(names(building_data_reduced)[-which(names(building_data_reduced) == "Heating_Load")], collapse=" + "), ")^2"))
+
+```
+
+```{r}
+# Backward selection with interactions
+regfit.bwd.int <- regsubsets(interaction_formula, data=train_data, nvmax=20, method="backward")
+regfit.bwd.int.summary <- summary(regfit.bwd.int)
+print(regfit.bwd.int.summary)
+```
+
+```{r}
+# Forward selection with interactions
+regfit.fwd.int <- regsubsets(interaction_formula, data=train_data, nvmax=20, method="forward")
+regfit.fwd.int.summary <- summary(regfit.fwd.int)
+print(regfit.fwd.int.summary)
+```
+
+```{r}
+# Function to calculate performance metrics
+calculate_metrics <- function(predictions, actual) {
+  mse <- mean((actual - predictions)^2)
+  rmse <- sqrt(mse)
+  mae <- mean(abs(actual - predictions))
+  r_squared <- 1 - sum((actual - predictions)^2) / sum((actual - mean(actual))^2)
+  
+  return(list(mse=mse, rmse=rmse, mae=mae, r_squared=r_squared))
+}
+```
+
+
+```{r}
+# Evaluate backward selection model with interactions
+best_bwd_model_int <- lm(as.formula(paste("Heating_Load ~", paste(names(coef(regfit.bwd.int, which.min(regfit.bwd.int.summary$bic)))[-1], collapse=" + "))), data=train_data) 
+
+bwd_predictions_int <- predict(best_bwd_model_int,newdata=test_data) 
+
+bwd_metrics_int<-calculate_metrics(bwd_predictions_int,test_data$Heating_Load)
+```
+
+```{r}
+# Evaluate forward selection model with interactions
+best_fwd_model_int<-lm(as.formula(paste("Heating_Load ~", paste(names(coef(regfit.fwd.int, which.min(regfit.fwd.int.summary$bic)))[-1], collapse=" + "))), data=train_data) 
+
+fwd_predictions_int<-predict(best_fwd_model_int,newdata=test_data) 
+
+fwd_metrics_int<-calculate_metrics(fwd_predictions_int,test_data$Heating_Load)
+```
+
+```{r}
+# Visualization : Performance Metrics Comparison
+metrics_df <- data.frame(
+  Model = c("Backward", "Forward"),
+  RMSE = c(bwd_metrics_int$rmse, fwd_metrics_int$rmse),
+  MAE = c(bwd_metrics_int$mae, fwd_metrics_int$mae),
+  R_squared = c(bwd_metrics_int$r_squared, fwd_metrics_int$r_squared)
+)
+
+ggplot(metrics_df, aes(x = Model)) +
+  geom_bar(aes(y = RMSE, fill = "RMSE"), stat = "identity", position = "dodge") +
+  geom_bar(aes(y = MAE, fill = "MAE"), stat = "identity", position = "dodge") +
+  geom_point(aes(y = R_squared, color = "R-squared")) +
+  scale_y_continuous(sec.axis = sec_axis(~., name = "R-squared")) +
+  labs(title = "Performance Metrics Comparison",
+       y = "Error Metrics",
+       fill = "Metric",
+       color = "Metric") +
+  theme_minimal()
+```
+
+```{r}
+# Visualization: Predicted vs Actual Plot
+plot_predictions <- function(predictions, actual, title) {
+  ggplot(data.frame(Predicted = predictions, Actual = actual), aes(x = Actual, y = Predicted)) +
+    geom_point(alpha = 0.5) +
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+    labs(title = title,
+         x = "Actual Heating Load",
+         y = "Predicted Heating Load") +
+    theme_minimal()
+}
+
+bwd_plot <- plot_predictions(bwd_predictions_int, test_data$Heating_Load, "Backward Selection: Predicted vs Actual")
+fwd_plot <- plot_predictions(fwd_predictions_int, test_data$Heating_Load, "Forward Selection: Predicted vs Actual")
+
+grid.arrange(bwd_plot, fwd_plot, ncol = 2)
+```
+
+```{r}
+library(glmnet)
+
+# Prepare the data
+x <- as.matrix(train_data[, !names(train_data) %in% c("Heating_Load")])
+y <- train_data$Heating_Load
+
+# Fit Lasso model
+lasso_model <- cv.glmnet(x, y, alpha = 1)
+
+# Make predictions on test data
+x_test <- as.matrix(test_data[, !names(test_data) %in% c("Heating_Load")])
+lasso_predictions <- predict(lasso_model, newx = x_test, s = "lambda.min")
+
+# Calculate performance metrics
+lasso_rmse <- sqrt(mean((test_data$Heating_Load - lasso_predictions)^2))
+lasso_rsq <- 1 - sum((test_data$Heating_Load - lasso_predictions)^2) / sum((test_data$Heating_Load - mean(test_data$Heating_Load))^2)
+
+cat("Lasso Regression Results:\n")
+cat("RMSE:", lasso_rmse, "\n")
+cat("R-squared:", lasso_rsq, "\n")
+```
+```{r}
+# Fit Ridge model
+ridge_model <- cv.glmnet(x, y, alpha = 0)
+
+# Make predictions on test data
+ridge_predictions <- predict(ridge_model, newx = x_test, s = "lambda.min")
+
+# Calculate performance metrics
+ridge_rmse <- sqrt(mean((test_data$Heating_Load - ridge_predictions)^2))
+ridge_rsq <- 1 - sum((test_data$Heating_Load - ridge_predictions)^2) / sum((test_data$Heating_Load - mean(test_data$Heating_Load))^2)
+
+cat("Ridge Regression Results:\n")
+cat("RMSE:", ridge_rmse, "\n")
+cat("R-squared:", ridge_rsq, "\n")
+```
+
+```{r}
+# Visualizations for all models
+
+# Function to create predicted vs actual plots
+plot_predictions_vs_actual <- function(predictions, actual_values, title) {
+  data <- data.frame(Predicted = as.vector(predictions), Actual = actual_values)
+  ggplot(data, aes(x = Actual, y = Predicted)) +
+    geom_point(color = 'blue', alpha = 0.5) +
+    geom_abline(slope = 1, intercept = 0, color = 'red', linetype = 'dashed') +
+    labs(title = title, x = "Actual Heating Load", y = "Predicted Heating Load") +
+    theme_minimal()
+}
+
+po_lm <- plot_predictions_vs_actual(predict(lm_model, newdata = test_data), 
+                                    test_data$Heating_Load, 
+                                    "Basic Linear Regression Model: Predicted vs Actual")
+
+p1_cv <- plot_predictions_vs_actual(predict(lm_model_cv, newdata = test_data), 
+                                    test_data$Heating_Load, 
+                                    "CV Model: Predicted vs Actual")
+
+p2_loocv <- plot_predictions_vs_actual(predict(lm_model_loocv, newdata = test_data), 
+                                       test_data$Heating_Load, 
+                                       "LOOCV Model: Predicted vs Actual")
+
+p3_backward <- plot_predictions_vs_actual(predict(best_bwd_model_int, newdata = test_data), 
+                                          test_data$Heating_Load, 
+                                          "Backward Selection: Predicted vs Actual")
+
+p4_forward <- plot_predictions_vs_actual(predict(best_fwd_model_int, newdata = test_data), 
+                                         test_data$Heating_Load, 
+                                         "Forward Selection: Predicted vs Actual")
+
+p5_backward_int <- plot_predictions_vs_actual(bwd_predictions_int, 
+                                              test_data$Heating_Load, 
+                                              "Backward Selection with Interactions: Predicted vs Actual")
+
+p6_forward_int <- plot_predictions_vs_actual(fwd_predictions_int, 
+                                             test_data$Heating_Load, 
+                                             "Forward Selection with Interactions: Predicted vs Actual")
+
+p7_lasso <- plot_predictions_vs_actual(lasso_predictions, 
+                                       test_data$Heating_Load, 
+                                       "Lasso Regression: Predicted vs Actual")
+
+p8_ridge <- plot_predictions_vs_actual(ridge_predictions, 
+                                       test_data$Heating_Load, 
+                                       "Ridge Regression: Predicted vs Actual")
+
+po_lm
+p1_cv
+p2_loocv
+p3_backward
+p4_forward
+p5_backward_int
+p6_forward_int
+p7_lasso
+p8_ridge
+```
+
