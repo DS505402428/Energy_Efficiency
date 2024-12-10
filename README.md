@@ -1,10 +1,10 @@
 **Overview**
 <br>A comprehensive analysis of building energy efficiency using the UCI Machine Learning Repository's Energy Efficiency dataset to predict heating load requirements based on architectural parameters.</br>
 <br>**Dataset Information**</br>
-<br>	Source:** UCI Machine Learning Repository</br>
-<br>	Size:** 768 samples, 8 features</br>
-<br>	Target Variable:** Heating Load</br>
-<br>	Features:**</br>
+<br>	Source: UCI Machine Learning Repository</br>
+<br>	Size: 768 samples, 8 features</br>
+<br>	Target Variable: Heating Load</br>
+<br>	Features:</br>
   <br>•	Relative Compactness</br>
   <br>•	Wall Area</br>
   <br>•	Overall Height</br>
@@ -18,16 +18,18 @@
 <br>•	Applied feature engineering to create new variables</br>
 <br>•	Log-transformed skewed numerical features</br>
 <br>**Models Implemented**</br>
-<br>Model Type<8t>                  RMSE	   R-squared</br>
-<br>Basic Linear Regression	    2.978	   0.915</br>
-<br>Cross-Validation	          2.970	   0.913</br>
-<br>LOOCV	                      3.004	   0.911</br>
-<br>Backward Selection	        2.975	   0.915</br>
-<br>Forward Selection	          2.975	   0.915</br>
-<br>Backward with Interactions	2.663    0.932</br>
-<br>Forward with Interactions	  2.668	   0.932</br>
-<br>Lasso Regression	          2.982	   0.915</br>
-<br>Ridge Regression	          3.245	   0.899</br>
+| Model Type                   | RMSE  | R-squared |
+|------------------------------|-------|-----------|
+| Basic Linear Regression      | 2.978 | 0.915     |
+| Cross-Validation             | 2.970 | 0.913     |
+| LOOCV                        | 3.004 | 0.911     |
+| Backward Selection           | 2.975 | 0.915     |
+| Forward Selection            | 2.975 | 0.915     |
+| Backward with Interactions   | 2.663 | 0.932     |
+| Forward with Interactions    | 2.668 | 0.932     |
+| Lasso Regression             | 2.982 | 0.915     |
+| Ridge Regression             | 3.245 | 0.899     |
+
 <br>**Key Findings**</br>
 <br>•	Backward selection with interactions achieved the best performance (RMSE: 2.663)</br>
 <br>•	Building shape and glazing characteristics significantly impact heating load</br>
