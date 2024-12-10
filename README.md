@@ -1,10 +1,10 @@
 **Overview**
 <br>A comprehensive analysis of building energy efficiency using the UCI Machine Learning Repository's Energy Efficiency dataset to predict heating load requirements based on architectural parameters.</br>
 <br>**Dataset Information**</br>
-<br>**	Source:** UCI Machine Learning Repository</br>
-<br>**	Size:** 768 samples, 8 features</br>
-<br>**	Target Variable:** Heating Load</br>
-<br>**	Features:**</br>
+<br>	Source:** UCI Machine Learning Repository</br>
+<br>	Size:** 768 samples, 8 features</br>
+<br>	Target Variable:** Heating Load</br>
+<br>	Features:**</br>
   <br>•	Relative Compactness</br>
   <br>•	Wall Area</br>
   <br>•	Overall Height</br>
@@ -18,7 +18,7 @@
 <br>•	Applied feature engineering to create new variables</br>
 <br>•	Log-transformed skewed numerical features</br>
 <br>**Models Implemented**</br>
-<br>Model Type                  RMSE	   R-squared</br>
+<br>Model Type<8t>                  RMSE	   R-squared</br>
 <br>Basic Linear Regression	    2.978	   0.915</br>
 <br>Cross-Validation	          2.970	   0.913</br>
 <br>LOOCV	                      3.004	   0.911</br>
